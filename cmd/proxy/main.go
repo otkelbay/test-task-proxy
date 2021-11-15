@@ -17,12 +17,12 @@ var (
 	openOrderAmountLimit  = flag.Int("open_order_amount_limit", 10, "open order amount limit")
 	openOrderSumLimit     = flag.Float64("open_order_sum_limit", 1000, "open order sum limit")
 	upgrader              = websocket.Upgrader{}
-	filter                = filterer.Filterer{}
 	clientWsConnectionMap = make(map[uint32]*websocket.Conn)
 	requestIDClientIDMap  = make(map[uint32]uint32)
 )
 
 var serverWsConnection *websocket.Conn
+var filter *filterer.Filterer
 
 func main() {
 	flag.Parse()
@@ -46,11 +46,7 @@ func main() {
 	defer serverWsConnection.Close()
 
 	// initializing the filterer
-	filter = filterer.Filterer{
-		Limits:               make(map[uint32]map[string][]float64),
-		OpenOrderSumLimit:    *openOrderSumLimit,
-		OpenOrderAmountLimit: *openOrderAmountLimit,
-	}
+	filter = filterer.New(*openOrderSumLimit, *openOrderAmountLimit)
 
 	// waiting and processing answers from the server
 	sendResponseFromServerToClient(serverWsConnection)

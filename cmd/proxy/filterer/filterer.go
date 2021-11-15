@@ -10,6 +10,17 @@ type Filterer struct {
 	Limits               map[uint32]map[string][]float64
 	OpenOrderAmountLimit int
 	OpenOrderSumLimit    float64
+	m                    sync.RWMutex
+}
+
+func New(openOrderSumLimit float64, openOrderAmountLimit int) *Filterer {
+	filterer := Filterer{}
+	filterer.m = sync.RWMutex{}
+	filterer.OpenOrderAmountLimit = openOrderAmountLimit
+	filterer.OpenOrderSumLimit = openOrderSumLimit
+	filterer.Limits = make(map[uint32]map[string][]float64)
+
+	return &filterer
 }
 
 func (f *Filterer) Filter(order *proxy.OrderRequest) bool {
@@ -20,17 +31,16 @@ func (f *Filterer) Filter(order *proxy.OrderRequest) bool {
 		return false
 	}
 
-	m := sync.RWMutex{}
-	m.RLock()
+	f.m.RLock()
 	_, ok := f.Limits[order.ClientID]
-	m.RUnlock()
+	f.m.RUnlock()
 	if !ok {
 		f.Limits[order.ClientID] = make(map[string][]float64)
 	}
 
-	m.RLock()
+	f.m.RLock()
 	_, ok = f.Limits[order.ClientID][order.Instrument]
-	m.RUnlock()
+	f.m.RUnlock()
 	if !ok {
 		if f.OpenOrderSumLimit < order.Volume {
 			return false
@@ -40,23 +50,23 @@ func (f *Filterer) Filter(order *proxy.OrderRequest) bool {
 		return true
 	}
 
-	m.Lock()
+	f.m.Lock()
 	clientLimit := f.Limits[order.ClientID][order.Instrument]
 	fmt.Printf("client_id: %d sum: %f \n", order.ClientID, sum(clientLimit))
 	fmt.Printf("client_id: %d amount: %d \n", order.ClientID, len(clientLimit))
 	if len(clientLimit) >= f.OpenOrderAmountLimit {
-		m.Unlock()
+		f.m.Unlock()
 		return false
 	}
 
 	resSum := sum(clientLimit) + order.Volume
 	if resSum > f.OpenOrderSumLimit {
-		m.Unlock()
+		f.m.Unlock()
 		return false
 	}
 
 	f.Limits[order.ClientID][order.Instrument] = append(f.Limits[order.ClientID][order.Instrument], order.Volume)
-	m.Unlock()
+	f.m.Unlock()
 
 	return true
 }
